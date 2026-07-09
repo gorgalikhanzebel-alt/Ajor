@@ -106,7 +106,7 @@ async def handle_media(message: types.Message):
     elif message.video:
         await message.answer("✅ فیلم شما دریافت شد!")
 
-# ======== بازی‌های جدید ========
+# ======== بازی‌ها ========
 @dp.callback_query(lambda c: c.data == "game")
 async def game(callback: types.CallbackQuery):
     await callback.message.answer("🎮 یک بازی انتخاب کن:", reply_markup=game_menu())
@@ -200,30 +200,72 @@ async def stats(callback: types.CallbackQuery):
     await callback.message.answer(f"📊 تعداد کاربران: {count}")
     await callback.answer()
 
-# ======== دستورات جانبی ========
+# ======== دستورات کامل ========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
-    await message.answer("📖 راهنما:\n/start - شروع\n/help - راهنما\n/profile - آیدی من\n/time - ساعت\n/joke - جوک")
+    await message.answer(
+        "📖 لیست دستورات:\n"
+        "/start - شروع و منوی اصلی\n"
+        "/help - نمایش راهنما\n"
+        "/about - درباره ربات\n"
+        "/ping - بررسی وضعیت\n"
+        "/time - ساعت و تاریخ\n"
+        "/id - آیدی عددی شما\n"
+        "/profile - پروفایل شما\n"
+        "/stat - آمار کاربران\n"
+        "/joke - جوک تصادفی\n"
+        "/quote - نقل قول انگیزشی\n"
+        "/admin - پنل ادمین"
+    )
 
-@dp.message(Command("profile"))
-async def profile(message: types.Message):
-    await message.answer(f"👤 نام: {message.from_user.full_name}\n🆔 آیدی: {message.from_user.id}")
+@dp.message(Command("about"))
+async def about(message: types.Message):
+    await message.answer("🤖 این ربات با aiogram ساخته شده و شامل بازی‌ها، دانلود اینستاگرام، و مدیریت گروه است.")
+
+@dp.message(Command("ping"))
+async def ping(message: types.Message):
+    await message.answer("✅ ربات آنلاین است!")
 
 @dp.message(Command("time"))
 async def time_command(message: types.Message):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await message.answer(f"🕒 {now}")
 
+@dp.message(Command("id"))
+async def id_command(message: types.Message):
+    await message.answer(f"🆔 آیدی عددی شما: `{message.from_user.id}`")
+
+@dp.message(Command("profile"))
+async def profile(message: types.Message):
+    await message.answer(f"👤 نام: {message.from_user.full_name}\n🆔 آیدی: {message.from_user.id}")
+
+@dp.message(Command("stat"))
+async def stat(message: types.Message):
+    count = users_col.count_documents({})
+    await message.answer(f"📊 تعداد کاربران: {count}")
+
 @dp.message(Command("joke"))
 async def joke(message: types.Message):
     jokes = ["چرا مرغ از جاده رد شد؟ 😂", "پایتون بهترین زبان!", "ربات خوب رباتی که جواب بده!"]
     await message.answer(random.choice(jokes))
 
+@dp.message(Command("quote"))
+async def quote(message: types.Message):
+    quotes = ["همیشه به فکر فردا باش!", "موفقیت یعنی بلند شدن دوباره!", "کد بزن و لذت ببر!"]
+    await message.answer(f"💬 {random.choice(quotes)}")
+
+@dp.message(Command("admin"))
+async def admin_command(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما دسترسی به پنل ادمین ندارید!")
+        return
+    await message.answer("⚙️ پنل ادمین:", reply_markup=admin_panel_menu())
+
 # ======== پیام‌های دیگر ========
 @dp.message()
 async def unknown(message: types.Message):
     if message.chat.type == "private":
-        await message.answer("❌ دستور نامعتبر! از /start استفاده کن.")
+        await message.answer("❌ دستور نامعتبر! از /start استفاده کن یا /help بزن.")
 
 # ======== پورت ========
 async def health_check(request):
