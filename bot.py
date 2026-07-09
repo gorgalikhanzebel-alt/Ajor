@@ -25,23 +25,37 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
-# ======== منوی اصلی ========
+ADMIN_ID = 466050034  # آیدی شما
+
+# ======== منوهای شیشه‌ای ========
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📥 دانلود اینستاگرام", callback_data="insta")],
         [InlineKeyboardButton(text="📤 آپلود فیلم/عکس", callback_data="upload")],
         [InlineKeyboardButton(text="🎮 بازی و سرگرمی", callback_data="game")],
         [InlineKeyboardButton(text="💰 حمایت مالی", callback_data="donate")],
-        [InlineKeyboardButton(text="👥 ممبرگیر", callback_data="members")]
+        [InlineKeyboardButton(text="👥 ممبرگیر", callback_data="members")],
+        [InlineKeyboardButton(text="⚙️ پنل ادمین", callback_data="admin_panel")]
     ])
 
 def game_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎲 تاس", callback_data="dice")],
-        [InlineKeyboardButton(text="🎯 دارت", callback_data="dart")]
+        [InlineKeyboardButton(text="🎲 تاس", callback_data="dice"),
+         InlineKeyboardButton(text="🎯 دارت", callback_data="dart")],
+        [InlineKeyboardButton(text="🎰 شانس", callback_data="slot")],
+        [InlineKeyboardButton(text="🪨 سنگ‌کاغذ‌قیچی", callback_data="rps")],
+        [InlineKeyboardButton(text="🔢 حدس عدد", callback_data="guess")],
+        [InlineKeyboardButton(text="🏎️ ماشین‌بازی", callback_data="race")],
+        [InlineKeyboardButton(text="🔙 برگشت", callback_data="back_main")]
     ])
 
-# ======== /start ========
+def admin_panel_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 آمار کاربران", callback_data="stats")],
+        [InlineKeyboardButton(text="🔙 برگشت", callback_data="back_main")]
+    ])
+
+# ======== دستور /start ========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
@@ -92,10 +106,10 @@ async def handle_media(message: types.Message):
     elif message.video:
         await message.answer("✅ فیلم شما دریافت شد!")
 
-# ======== بازی‌ها ========
+# ======== بازی‌های جدید ========
 @dp.callback_query(lambda c: c.data == "game")
 async def game(callback: types.CallbackQuery):
-    await callback.message.answer("یک بازی انتخاب کن:", reply_markup=game_menu())
+    await callback.message.answer("🎮 یک بازی انتخاب کن:", reply_markup=game_menu())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "dice")
@@ -106,6 +120,54 @@ async def dice(callback: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data == "dart")
 async def dart(callback: types.CallbackQuery):
     await callback.message.answer_dice(emoji="🎯")
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "slot")
+async def slot(callback: types.CallbackQuery):
+    await callback.message.answer_dice(emoji="🎰")
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "rps")
+async def rps(callback: types.CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton("🪨 سنگ", callback_data="rps_stone"),
+         InlineKeyboardButton("📄 کاغذ", callback_data="rps_paper"),
+         InlineKeyboardButton("✂️ قیچی", callback_data="rps_scissors")]
+    ])
+    await callback.message.answer("یکی رو انتخاب کن:", reply_markup=kb)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("rps_"))
+async def rps_play(callback: types.CallbackQuery):
+    choices = {"rps_stone": "🪨 سنگ", "rps_paper": "📄 کاغذ", "rps_scissors": "✂️ قیچی"}
+    bot_choice = random.choice(list(choices.values()))
+    user_choice = choices[callback.data]
+    if user_choice == bot_choice:
+        result = "🤝 مساوی!"
+    elif (user_choice == "🪨 سنگ" and bot_choice == "✂️ قیچی") or \
+         (user_choice == "📄 کاغذ" and bot_choice == "🪨 سنگ") or \
+         (user_choice == "✂️ قیچی" and bot_choice == "📄 کاغذ"):
+        result = "🎉 بردی!"
+    else:
+        result = "😢 باختی!"
+    await callback.message.answer(f"تو: {user_choice}\nربات: {bot_choice}\n{result}")
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "guess")
+async def guess(callback: types.CallbackQuery):
+    number = random.randint(1, 10)
+    await callback.message.answer(f"🔢 من عدد {number} رو انتخاب کردم!")
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "race")
+async def race(callback: types.CallbackQuery):
+    winner = random.choice(["🚗", "🚕", "🚙", "🏎️"])
+    await callback.message.answer(f"🏁 برنده مسابقه: {winner}")
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "back_main")
+async def back_main(callback: types.CallbackQuery):
+    await callback.message.answer("🔙 منوی اصلی:", reply_markup=main_menu())
     await callback.answer()
 
 # ======== حمایت مالی ========
@@ -120,7 +182,25 @@ async def members(callback: types.CallbackQuery):
     await callback.message.answer("👥 برای دریافت لینک دعوت، به ادمین پیام بده: @Admin")
     await callback.answer()
 
-# ======== دستورات ========
+# ======== پنل ادمین (فقط برای شما) ========
+@dp.callback_query(lambda c: c.data == "admin_panel")
+async def admin_panel(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید!", show_alert=True)
+        return
+    await callback.message.answer("⚙️ پنل ادمین:", reply_markup=admin_panel_menu())
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "stats")
+async def stats(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید!", show_alert=True)
+        return
+    count = users_col.count_documents({})
+    await callback.message.answer(f"📊 تعداد کاربران: {count}")
+    await callback.answer()
+
+# ======== دستورات جانبی ========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     await message.answer("📖 راهنما:\n/start - شروع\n/help - راهنما\n/profile - آیدی من\n/time - ساعت\n/joke - جوک")
