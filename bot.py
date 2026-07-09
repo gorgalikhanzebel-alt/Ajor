@@ -1,13 +1,13 @@
 import asyncio
 import os
 import logging
-import requests
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
 from aiohttp import web
+import instaloader
 
 TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
@@ -25,6 +25,30 @@ dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
 ADMIN_ID = 466050034
+
+# ======== اطلاعات مستقیم اینستاگرام (فقط برای تست) ========
+INSTA_USERNAME = "pishkhan72241148"
+INSTA_PASSWORD = "Zz@123456"
+
+# ======== راه‌اندازی نشست اینستاگرام ========
+def get_instaloader_session():
+    L = instaloader.Instaloader(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    )
+    try:
+        L.load_session_from_file(INSTA_USERNAME)
+        logging.info("✅ نشست اینستاگرام از فایل بارگذاری شد.")
+    except:
+        try:
+            L.login(INSTA_USERNAME, INSTA_PASSWORD)
+            L.save_session_to_file()
+            logging.info("✅ لاگین به اینستاگرام موفق بود.")
+        except Exception as e:
+            logging.error(f"❌ لاگین ناموفق: {e}")
+            return None
+    return L
+
+L = get_instaloader_session()
 
 # ======== منوهای شیشه‌ای ========
 def main_menu():
@@ -60,7 +84,7 @@ async def start(message: types.Message):
         reply_markup=main_menu()
     )
 
-# ======== دانلود اینستاگرام (واقعی) ========
+# ======== دانلود اینستاگرام با یوزربات ========
 @dp.callback_query(lambda c: c.data == "insta")
 async def insta(callback: types.CallbackQuery):
     await callback.message.answer("📎 لینک پست اینستاگرام رو بفرست:")
@@ -69,46 +93,32 @@ async def insta(callback: types.CallbackQuery):
 @dp.message(lambda msg: msg.text and ("instagram.com" in msg.text or "instagr.am" in msg.text))
 async def get_insta(message: types.Message):
     url = message.text.strip()
-    msg = await message.answer("⏳ در حال دریافت از اینستاگرام...")
+    msg = await message.answer("⏳ در حال دریافت از اینستاگرام (با یوزربات)...")
+
+    if L is None:
+        await message.answer("❌ ربات به اینستاگرام متصل نیست! با ادمین تماس بگیرید.")
+        await msg.delete()
+        return
 
     try:
-        # استفاده از API رایگان viddownload.in
-        api_url = f"https://viddownload.in/api/instagram?url={url}"
-        response = requests.get(api_url, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success") and data.get("media"):
-                media_url = data["media"]
-                if data.get("type") == "video":
-                    await message.answer_video(media_url, caption="✅ ویدیو دانلود شد!")
-                else:
-                    await message.answer_photo(media_url, caption="✅ عکس دانلود شد!")
-                await msg.delete()
-                return
+        post = instaloader.Post.from_url(L.context, url)
+        if post is None:
+            await message.answer("❌ پست پیدا نشد. لینک را بررسی کن.")
+            await msg.delete()
+            return
 
-        # API جایگزین: apido.ir
-        api_url2 = f"https://apido.ir/api/instagram/post?url={url}"
-        response2 = requests.get(api_url2, timeout=15)
-        if response2.status_code == 200:
-            data2 = response2.json()
-            if data2.get("status") == "success" and data2.get("data"):
-                post = data2["data"]
-                if post.get("type") == "video":
-                    await message.answer_video(post["download_url"], caption="✅ ویدیو دانلود شد!")
-                elif post.get("type") == "image":
-                    await message.answer_photo(post["download_url"], caption="✅ عکس دانلود شد!")
-                else:
-                    await message.answer("❌ نوع پست پشتیبانی نمی‌شود.")
-                await msg.delete()
-                return
-
-        # اگر هیچ API جواب نداد
-        await message.answer("❌ خطا! لینک معتبر نیست یا اینستاگرام محدودیت ایجاد کرده.")
-
+        if post.is_video:
+            video_url = post.video_url
+            await message.answer_video(video_url, caption="✅ ویدیو با موفقیت دانلود شد!")
+        elif post.typename == "GraphImage":
+            image_url = post.url
+            await message.answer_photo(image_url, caption="✅ عکس با موفقیت دانلود شد!")
+        else:
+            await message.answer("❌ این پست چندرسانه‌ای است و فعلاً پشتیبانی نمی‌شود.")
     except Exception as e:
         logging.error(f"Instagram error: {e}")
-        await message.answer("❌ خطا! لطفاً لینک را بررسی کن یا بعداً امتحان کن.")
-
+        await message.answer("❌ خطا! لینک معتبر نیست یا اینستاگرام محدودیت ایجاد کرده است.")
+    
     await msg.delete()
 
 # ======== بازی‌ها ========
