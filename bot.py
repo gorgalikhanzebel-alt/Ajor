@@ -20,13 +20,13 @@ if not TOKEN or not MONGO_URI:
 client = MongoClient(MONGO_URI)
 db = client["telegram_bot"]
 users_col = db["users"]
-settings_col = db["settings"]
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
-ADMIN_ID = 8985557733  # آیدی عددی خودت رو اینجا بذار (از /profile بگیر)
+# ======== آیدی ادمین (تنها خودت) ========
+ADMIN_ID = 466050034  # ✅ آیدی شما
 
 # ======== منوی اصلی (شیشه‌ای) ========
 def main_menu():
@@ -85,7 +85,6 @@ async def get_insta(message: types.Message):
     url = message.text.strip()
     msg = await message.answer("⏳ در حال دریافت از اینستاگرام...")
     try:
-        # استفاده از API رایگان apido.ir
         api_url = f"https://apido.ir/api/instagram/post?url={url}"
         response = requests.get(api_url, timeout=10)
         if response.status_code == 200:
@@ -100,7 +99,7 @@ async def get_insta(message: types.Message):
                     await message.answer("❌ نوع پست پشتیبانی نمی‌شود.")
                 await msg.delete()
                 return
-        # روش جایگزین: viddownload
+        # روش جایگزین
         api_url2 = f"https://viddownload.in/api/instagram?url={url}"
         response2 = requests.get(api_url2, timeout=10)
         if response2.status_code == 200:
@@ -211,7 +210,7 @@ async def members(callback: types.CallbackQuery):
     await callback.message.answer("👥 برای لینک دعوت به ادمین پیام بده: @Admin")
     await callback.answer()
 
-# ======== پنل ادمین (فقط برای ادمین) ========
+# ======== پنل ادمین ========
 @dp.callback_query(lambda c: c.data == "admin_panel")
 async def admin_panel_callback(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
