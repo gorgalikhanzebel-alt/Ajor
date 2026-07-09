@@ -1,167 +1,211 @@
-import asyncio
+import telebot
+from telebot import types
+import sqlite3
+import random
+import time
 import os
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
-from aiohttp import web
+from datetime import datetime
 
-TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    logging.error("❌ توکن تنظیم نشده!")
-    exit(1)
+# ==================== CONFIG ====================
+TOKEN = "8985557733:AAEQlfffll53QLjNKm8sc3WOM13CIe9Inzw"
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-logging.basicConfig(level=logging.INFO)
+bot = telebot.TeleBot(TOKEN)
 
-# ======== تابع بررسی ادمین ========
-async def is_admin(chat_id: int, user_id: int) -> bool:
-    try:
-        member = await bot.get_chat_member(chat_id, user_id)
-        return member.status in ["creator", "administrator"]
-    except:
-        return False
+# Database
+conn = sqlite3.connect('bot_data.db', check_same_thread=False)
+cursor = conn.cursor()
 
-# ======== منوی مدیریت گروه ========
-def group_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("🔒 قفل گروه", callback_data="lock")],
-        [InlineKeyboardButton("🔓 باز کردن گروه", callback_data="unlock")],
-        [InlineKeyboardButton("🚫 بن کاربر", callback_data="ban")],
-        [InlineKeyboardButton("✅ رفع بن", callback_data="unban")],
-        [InlineKeyboardButton("🧹 پاک کردن پیام‌ها", callback_data="clear")]
-    ])
+# Tables
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    first_name TEXT,
+    is_admin INTEGER DEFAULT 0,
+    join_date TEXT,
+    points INTEGER DEFAULT 0
+)
+''')
 
-# ======== دستور /start ========
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    if message.chat.type == "private":
-        await message.answer("👋 سلام! من ربات مدیریت گروه هستم. لطفاً مرا به گروه اضافه کن و ادمین کن.")
-    else:
-        await message.answer("🤖 ربات مدیریت گروه فعال است.", reply_markup=group_menu())
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS jokes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT UNIQUE
+)
+''')
 
-# ======== قفل ========
-@dp.callback_query(lambda c: c.data == "lock")
-async def lock_group(callback: types.CallbackQuery):
-    if not await is_admin(callback.message.chat.id, callback.from_user.id):
-        await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)
+''')
+
+# Default settings
+default_settings = {
+    'welcome_message': 'سلام! به ربات فوق پیشرفته 🎉 خوش اومدی\nاز منو پایین استفاده کن',
+    'max_media_mb': '50'
+}
+
+for k, v in default_settings.items():
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
+
+# Sample jokes
+sample_jokes = [
+    "چرا برنامه‌نویس‌ها عاشق تاریکی هستن؟ چون Light Mode چشمشون رو اذیت می‌کنه!",
+    "یه باگ بهم گفت: تو منو پیدا کردی؟ گفتم: بله، حالا برو fix شو!",
+    "تلگرام بهتره یا واتساپ؟ هر دو، ولی با این ربات تلگرام خفن‌تره 😎",
+    "چرا کامپیوتر رفت دکتر؟ چون ویروس گرفته بود!"
+]
+
+for joke in sample_jokes:
+    cursor.execute("INSERT OR IGNORE INTO jokes (text) VALUES (?)", (joke,))
+
+conn.commit()
+
+# Create upload folders
+os.makedirs("uploads/photos", exist_ok=True)
+os.makedirs("uploads/videos", exist_ok=True)
+
+# ==================== HELPERS ====================
+def is_admin(uid):
+    cursor.execute("SELECT is_admin FROM users WHERE user_id = ?", (uid,))
+    res = cursor.fetchone()
+    return res and res[0] == 1
+
+def add_user(user):
+    cursor.execute("""
+        INSERT OR REPLACE INTO users 
+        (user_id, username, first_name, join_date) 
+        VALUES (?, ?, ?, ?)
+    """, (user.id, user.username, user.first_name, datetime.now().isoformat()))
+    conn.commit()
+
+def get_setting(key):
+    cursor.execute("SELECT value FROM settings WHERE key=?", (key,))
+    res = cursor.fetchone()
+    return res[0] if res else None
+
+# ==================== KEYBOARDS ====================
+def main_kb():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb.add('🎮 بازی‌ها', '🤣 جوک')
+    kb.add('📸 آپلود عکس', '🎥 آپلود ویدیو')
+    kb.add('📢 کانال', '👥 گروه')
+    kb.add('⚙️ تنظیمات', '🛠 ادمین')
+    return kb
+
+def admin_kb():
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton("👥 کاربران", callback_data="adm_users"),
+        types.InlineKeyboardButton("📊 آمار", callback_data="adm_stats")
+    )
+    kb.add(
+        types.InlineKeyboardButton("📣 پخش همگانی", callback_data="adm_broadcast"),
+        types.InlineKeyboardButton("🔧 تنظیمات", callback_data="adm_settings")
+    )
+    return kb
+
+# ==================== HANDLERS ====================
+@bot.message_handler(commands=['start'])
+def cmd_start(m):
+    add_user(m.from_user)
+    bot.send_message(m.chat.id, get_setting('welcome_message'), reply_markup=main_kb())
+
+@bot.message_handler(commands=['admin'])
+def cmd_admin(m):
+    if not is_admin(m.from_user.id):
+        bot.reply_to(m, "⛔ فقط ادمین‌ها دسترسی دارند")
         return
-    await bot.set_chat_permissions(callback.message.chat.id, ChatPermissions(can_send_messages=False))
-    await callback.message.answer("🔒 گروه قفل شد.")
-    await callback.answer()
+    bot.send_message(m.chat.id, "🛠 پنل ادمین", reply_markup=admin_kb())
 
-# ======== باز کردن ========
-@dp.callback_query(lambda c: c.data == "unlock")
-async def unlock_group(callback: types.CallbackQuery):
-    if not await is_admin(callback.message.chat.id, callback.from_user.id):
-        await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
+# Media Handling
+@bot.message_handler(content_types=['photo'])
+def save_photo(m):
+    add_user(m.from_user)
+    file_id = m.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    data = bot.download_file(file_info.file_path)
+    
+    path = f"uploads/photos/{m.from_user.id}_{int(time.time())}.jpg"
+    with open(path, 'wb') as f:
+        f.write(data)
+    
+    bot.reply_to(m, f"✅ عکس با موفقیت ذخیره شد!\n📁 {path}")
+
+@bot.message_handler(content_types=['video'])
+def save_video(m):
+    add_user(m.from_user)
+    if m.video.file_size > int(get_setting('max_media_mb')) * 1024*1024:
+        bot.reply_to(m, "❌ حجم ویدیو بیش از حد مجاز است!")
         return
-    await bot.set_chat_permissions(callback.message.chat.id, ChatPermissions(can_send_messages=True))
-    await callback.message.answer("🔓 گروه باز شد.")
-    await callback.answer()
+    
+    file_info = bot.get_file(m.video.file_id)
+    data = bot.download_file(file_info.file_path)
+    
+    path = f"uploads/videos/{m.from_user.id}_{int(time.time())}.mp4"
+    with open(path, 'wb') as f:
+        f.write(data)
+    
+    bot.reply_to(m, f"✅ ویدیو با موفقیت ذخیره شد!\n📁 {path}")
 
-# ======== بن ========
-@dp.callback_query(lambda c: c.data == "ban")
-async def ban_user(callback: types.CallbackQuery):
-    if not await is_admin(callback.message.chat.id, callback.from_user.id):
-        await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
+# Games & Entertainment
+@bot.message_handler(regexp='🎮 بازی‌ها')
+def games(m):
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("🎲 تاس", callback_data="game_dice"))
+    kb.add(types.InlineKeyboardButton("❓ جوک کوییز", callback_data="game_jokequiz"))
+    bot.send_message(m.chat.id, "🎮 انتخاب بازی:", reply_markup=kb)
+
+@bot.message_handler(regexp='🤣 جوک')
+def send_joke(m):
+    cursor.execute("SELECT text FROM jokes ORDER BY RANDOM() LIMIT 1")
+    joke_text = cursor.fetchone()
+    bot.send_message(m.chat.id, f"🤣 {joke_text[0] if joke_text else 'جوک جدیدی پیدا نشد!'}")
+
+# Admin Callbacks
+@bot.callback_query_handler(func=lambda c: True)
+def callback_handler(c):
+    uid = c.from_user.id
+    if c.data == "game_dice":
+        bot.send_dice(c.message.chat.id)
+    elif c.data == "game_jokequiz":
+        cursor.execute("SELECT text FROM jokes ORDER BY RANDOM() LIMIT 1")
+        joke_text = cursor.fetchone()[0]
+        bot.send_message(c.message.chat.id, f"🤔 جوک:\n{joke_text}")
+    
+    elif c.data.startswith("adm_") and is_admin(uid):
+        if c.data == "adm_users":
+            cursor.execute("SELECT user_id, username, first_name FROM users LIMIT 20")
+            users = cursor.fetchall()
+            txt = "👥 کاربران:\n" + "\n".join([f"{u[0]} - @{u[1] or 'بدون یوزرنیم'} {u[2]}" for u in users])
+            bot.edit_message_text(txt, c.message.chat.id, c.message.message_id)
+        
+        elif c.data == "adm_stats":
+            cursor.execute("SELECT COUNT(*) FROM users")
+            total = cursor.fetchone()[0]
+            bot.edit_message_text(f"📊 آمار ربات:\nتعداد کل کاربران: {total}", c.message.chat.id, c.message.message_id)
+        
+        elif c.data == "adm_broadcast":
+            msg = bot.send_message(c.message.chat.id, "📣 متن پیام همگانی را ارسال کنید:")
+            bot.register_next_step_handler(msg, broadcast_message)
+
+def broadcast_message(m):
+    if not is_admin(m.from_user.id):
         return
-    await callback.message.answer("🚫 آیدی عددی کاربر رو به‌صورت زیر بفرست:\n`/ban 123456789`")
-    await callback.answer()
+    cursor.execute("SELECT user_id FROM users")
+    success = 0
+    for (user_id,) in cursor.fetchall():
+        try:
+            bot.send_message(user_id, m.text)
+            success += 1
+        except:
+            pass
+    bot.send_message(m.chat.id, f"✅ پیام به {success} کاربر ارسال شد!")
 
-@dp.message(Command("ban"))
-async def ban_cmd(message: types.Message):
-    if not await is_admin(message.chat.id, message.from_user.id):
-        await message.answer("⛔ فقط ادمین‌ها!")
-        return
-    try:
-        user_id = int(message.text.split()[1])
-        await bot.ban_chat_member(message.chat.id, user_id)
-        await message.answer(f"✅ کاربر {user_id} بن شد.")
-    except:
-        await message.answer("❌ فرمت صحیح: `/ban 123456789`")
-
-# ======== رفع بن ========
-@dp.callback_query(lambda c: c.data == "unban")
-async def unban_user(callback: types.CallbackQuery):
-    if not await is_admin(callback.message.chat.id, callback.from_user.id):
-        await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
-        return
-    await callback.message.answer("✅ آیدی عددی کاربر رو به‌صورت زیر بفرست:\n`/unban 123456789`")
-    await callback.answer()
-
-@dp.message(Command("unban"))
-async def unban_cmd(message: types.Message):
-    if not await is_admin(message.chat.id, message.from_user.id):
-        await message.answer("⛔ فقط ادمین‌ها!")
-        return
-    try:
-        user_id = int(message.text.split()[1])
-        await bot.unban_chat_member(message.chat.id, user_id)
-        await message.answer(f"✅ بن کاربر {user_id} رفع شد.")
-    except:
-        await message.answer("❌ فرمت صحیح: `/unban 123456789`")
-
-# ======== پاک کردن پیام‌ها ========
-@dp.callback_query(lambda c: c.data == "clear")
-async def clear_messages(callback: types.CallbackQuery):
-    if not await is_admin(callback.message.chat.id, callback.from_user.id):
-        await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
-        return
-    await callback.message.answer("🧹 تعداد پیام‌ها رو بفرست (مثلاً `10`):")
-    await callback.answer()
-
-@dp.message(lambda msg: msg.text and msg.text.isdigit())
-async def clear_cmd(message: types.Message):
-    if not await is_admin(message.chat.id, message.from_user.id):
-        await message.answer("⛔ فقط ادمین‌ها!")
-        return
-    count = int(message.text)
-    if count > 100:
-        await message.answer("❌ حداکثر ۱۰۰ پیام.")
-        return
-    deleted = 0
-    async for msg in bot.get_chat_history(message.chat.id, limit=count):
-        if msg.message_id != message.message_id:
-            await msg.delete()
-            deleted += 1
-    await message.answer(f"✅ {deleted} پیام پاک شد.")
-
-# ======== خوش‌آمدگویی ========
-@dp.message()
-async def welcome(message: types.Message):
-    if message.new_chat_members:
-        for member in message.new_chat_members:
-            await message.answer(f"👋 به گروه خوش آمدی {member.full_name}!")
-
-# ======== فیلتر لینک ========
-@dp.message()
-async def filter_links(message: types.Message):
-    if message.chat.type != "private":
-        if message.text and ("http" in message.text or "www." in message.text):
-            if not await is_admin(message.chat.id, message.from_user.id):
-                await message.delete()
-                await message.answer("❌ ارسال لینک ممنوع!", reply_to_message_id=message.message_id)
-
-# ======== پورت ========
-async def health_check(request):
-    return web.Response(text="✅ Bot is running!")
-
-async def start_web():
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logging.info(f"✅ Web server started on port {port}")
-
-async def main():
-    await start_web()
-    logging.info("🤖 Starting bot...")
-    await dp.start_polling(bot, skip_updates=True)
-
+# Run the bot
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("🚀 ربات تلگرامی فوق پیشرفته با موفقیت شروع شد!")
+    print("📁 پوشه uploads برای ذخیره عکس و ویدیو ایجاد شد.")
+    bot.infinity_polling()
