@@ -3,4 +3,4 @@ yt-dlp
 aiohttp
 python-dotenv
 aiosqlite
-motor  # برای MongoDB
+motor
