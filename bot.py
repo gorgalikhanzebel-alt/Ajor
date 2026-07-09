@@ -38,7 +38,7 @@ async def is_member(user_id: int) -> bool:
     except:
         return False
 
-# ======== منوهای شیشه‌ای ========
+# ======== منوهای شیشه‌ای (با دکمه‌های جدید) ========
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📥 دانلود اینستاگرام", callback_data="insta")],
@@ -111,7 +111,7 @@ async def check_join(callback: types.CallbackQuery):
     else:
         await callback.answer("❌ هنوز عضو کانال نشدی! اول عضو شو.", show_alert=True)
 
-# ======== دانلود اینستاگرام (همون روش قبلی، ولی با پیام خطا) ========
+# ======== دانلود اینستاگرام (غیرفعال) ========
 @dp.callback_query(lambda c: c.data == "insta")
 async def insta(callback: types.CallbackQuery):
     if not await is_member(callback.from_user.id):
@@ -127,7 +127,7 @@ async def get_insta(message: types.Message):
         return
     await message.answer("❌ متأسفانه دانلود اینستاگرام با مشکلات فنی مواجه شده. لطفاً از گزینه‌های یوتیوب یا تیک‌تاک استفاده کن.")
 
-# ======== دانلود یوتیوب (جدید) ========
+# ======== دانلود یوتیوب ========
 @dp.callback_query(lambda c: c.data == "youtube")
 async def youtube(callback: types.CallbackQuery):
     if not await is_member(callback.from_user.id):
@@ -162,7 +162,7 @@ async def get_youtube(message: types.Message):
         await message.answer("❌ خطا! لینک معتبر نیست یا ویدیو قابل دانلود نیست.")
     await msg.delete()
 
-# ======== دانلود تیک‌تاک (جدید) ========
+# ======== دانلود تیک‌تاک ========
 @dp.callback_query(lambda c: c.data == "tiktok")
 async def tiktok(callback: types.CallbackQuery):
     if not await is_member(callback.from_user.id):
@@ -194,10 +194,6 @@ async def get_tiktok(message: types.Message):
         logging.error(e)
         await message.answer("❌ خطا! لطفاً لینک را بررسی کن.")
     await msg.delete()
-
-# ======== بقیه بخش‌ها (همون کد قبلی، بدون تغییر) ========
-# آپلود، بازی‌ها، حمایت، ممبرگیر، پنل ادمین، دستورات و پورت
-# (این بخش‌ها دقیقاً مثل نسخه‌ی قبلی هستن و تغییری نکردن)
 
 # ======== آپلود ========
 @dp.callback_query(lambda c: c.data == "upload")
