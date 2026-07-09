@@ -2,20 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# نصب پیش‌نیازهای سیستمی (مورد نیاز برای yt-dlp)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# نصب پیش‌نیازهای سیستمی
+RUN apt-get update && apt-get install -y \
     gcc \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# کپی فایل requirements
+# کپی فایل‌ها
 COPY requirements.txt .
-
-# نصب uv و سپس نصب کتابخانه‌ها با uv (بسیار سریع‌تر از pip)
-RUN pip install uv && \
-    uv pip install --system --no-cache-dir -r requirements.txt
-
-# کپی کد اصلی
 COPY bot.py .
+
+# نصب کتابخانه‌ها با pip
+RUN pip install --no-cache-dir -r requirements.txt
 
 # اجرای ربات
 CMD ["python", "bot.py"]
