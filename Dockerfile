@@ -10,10 +10,9 @@ RUN apt-get update && apt-get install -y \
 
 # کپی فایل‌ها
 COPY requirements.txt .
-COPY bot.py .
-
-# نصب کتابخانه‌ها با pip
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY bot.py .
 
 # اجرای ربات
 CMD ["python", "bot.py"]
