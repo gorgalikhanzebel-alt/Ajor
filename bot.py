@@ -93,7 +93,7 @@ async def start(message: types.Message):
         return
 
     await message.answer(
-        f"🚀 سلام {message.from_user.first_name}!\nبه ربات خوش آمدی. (نسخه جدید)",  # اینجا تغییر رو ببین
+        f"🚀 سلام {message.from_user.first_name}!\nبه ربات خوش آمدی. (نسخه جدید)",  # <-- این تغییر رو ببین
         reply_markup=main_menu()
     )
 
