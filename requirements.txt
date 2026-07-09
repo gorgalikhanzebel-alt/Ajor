@@ -4,3 +4,4 @@ aiohttp
 python-dotenv
 aiosqlite
 motor
+magic-filter
