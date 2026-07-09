@@ -1,7 +1,0 @@
-aiogram==3.13.0
-yt-dlp
-aiohttp
-python-dotenv
-aiosqlite
-motor
-magic-filter
