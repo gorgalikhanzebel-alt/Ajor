@@ -1,33 +1,23 @@
 import asyncio
 import os
 import logging
-import re
-from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
-from pymongo import MongoClient
 from aiohttp import web
 
 TOKEN = os.getenv("BOT_TOKEN")
-MONGO_URI = os.getenv("MONGO_URI")
-
-if not TOKEN or not MONGO_URI:
-    logging.error("❌ متغیرهای محیطی تنظیم نشده‌اند!")
+if not TOKEN:
+    logging.error("❌ توکن تنظیم نشده!")
     exit(1)
-
-client = MongoClient(MONGO_URI)
-db = client["telegram_bot"]
-users_col = db["users"]
-groups_col = db["groups"]
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
-ADMIN_ID = 466050034
+ADMIN_ID = 466050034  # ایدی عددی شما
 
-# ======== بررسی ادمین بودن در گروه ========
+# ======== بررسی ادمین بودن ========
 async def is_admin(chat_id: int, user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id, user_id)
@@ -35,134 +25,106 @@ async def is_admin(chat_id: int, user_id: int) -> bool:
     except:
         return False
 
-# ======== منوهای شیشه‌ای ========
-def main_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 دانلود اینستاگرام", callback_data="insta")],
-        [InlineKeyboardButton(text="🎮 بازی", callback_data="game")],
-        [InlineKeyboardButton(text="⚙️ مدیریت گروه", callback_data="group_manage")],
-        [InlineKeyboardButton(text="⚙️ پنل ادمین", callback_data="admin_panel")]
-    ])
-
+# ======== منوی مدیریت گروه ========
 def group_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("🔒 قفل گروه", callback_data="lock_group"),
-         InlineKeyboardButton("🔓 باز کردن گروه", callback_data="unlock_group")],
-        [InlineKeyboardButton("🚫 بن کاربر", callback_data="ban_user"),
-         InlineKeyboardButton("✅ رفع بن", callback_data="unban_user")],
-        [InlineKeyboardButton("🧹 پاک کردن پیام‌ها", callback_data="clear_messages")],
-        [InlineKeyboardButton("🔙 برگشت", callback_data="back_main")]
-    ])
-
-def game_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎲 تاس", callback_data="dice"),
-         InlineKeyboardButton(text="🎯 دارت", callback_data="dart")],
-        [InlineKeyboardButton(text="🔙 برگشت", callback_data="back_main")]
-    ])
-
-def admin_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 آمار کاربران", callback_data="stats")],
-        [InlineKeyboardButton(text="🔙 برگشت", callback_data="back_main")]
+        [InlineKeyboardButton("🔒 قفل گروه", callback_data="lock")],
+        [InlineKeyboardButton("🔓 باز کردن گروه", callback_data="unlock")],
+        [InlineKeyboardButton("🚫 بن کاربر", callback_data="ban")],
+        [InlineKeyboardButton("✅ رفع بن", callback_data="unban")],
+        [InlineKeyboardButton("🧹 پاک کردن پیام‌ها", callback_data="clear")]
     ])
 
 # ======== دستور /start ========
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    user_id = message.from_user.id
-    if not users_col.find_one({"_id": user_id}):
-        users_col.insert_one({"_id": user_id, "name": message.from_user.first_name})
-    await message.answer(
-        f"🚀 سلام {message.from_user.first_name}!\n"
-        "به ربات مدیریت گروه خوش آمدی.\n"
-        "از دکمه‌ها استفاده کن:",
-        reply_markup=main_menu()
-    )
+    if message.chat.type == "private":
+        await message.answer("👋 سلام! من ربات مدیریت گروه هستم. لطفاً مرا به گروه اضافه کن و ادمین کن.")
+    else:
+        await message.answer("🤖 ربات مدیریت گروه فعال است.", reply_markup=group_menu())
 
-# ======== مدیریت گروه ========
-@dp.callback_query(lambda c: c.data == "group_manage")
-async def group_manage(callback: types.CallbackQuery):
-    await callback.message.answer("⚙️ مدیریت گروه:", reply_markup=group_menu())
-    await callback.answer()
-
-# ======== قفل و باز کردن گروه ========
-@dp.callback_query(lambda c: c.data == "lock_group")
+# ======== دکمه قفل گروه ========
+@dp.callback_query(lambda c: c.data == "lock")
 async def lock_group(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
         await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
         return
     await bot.set_chat_permissions(callback.message.chat.id, ChatPermissions(can_send_messages=False))
-    await callback.message.answer("🔒 گروه قفل شد. فقط ادمین‌ها می‌تونن پیام بدن.")
+    await callback.message.answer("🔒 گروه قفل شد.")
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data == "unlock_group")
+# ======== دکمه باز کردن گروه ========
+@dp.callback_query(lambda c: c.data == "unlock")
 async def unlock_group(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
         await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
         return
     await bot.set_chat_permissions(callback.message.chat.id, ChatPermissions(can_send_messages=True))
-    await callback.message.answer("🔓 گروه باز شد. همه می‌تونن پیام بدن.")
+    await callback.message.answer("🔓 گروه باز شد.")
     await callback.answer()
 
-# ======== بن و رفع بن ========
-@dp.callback_query(lambda c: c.data == "ban_user")
+# ======== دکمه بن کاربر ========
+@dp.callback_query(lambda c: c.data == "ban")
 async def ban_user(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
         await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
         return
-    await callback.message.answer("🚫 آیدی عددی کاربر رو برای بن کردن بفرست:")
+    await callback.message.answer("🚫 آیدی عددی کاربر رو به‌صورت زیر بفرست:\n`/ban 123456789`")
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data == "unban_user")
+# ======== دستور /ban ========
+@dp.message(Command("ban"))
+async def ban_cmd(message: types.Message):
+    if not await is_admin(message.chat.id, message.from_user.id):
+        await message.answer("⛔ فقط ادمین‌ها!")
+        return
+    try:
+        user_id = int(message.text.split()[1])
+        await bot.ban_chat_member(message.chat.id, user_id)
+        await message.answer(f"✅ کاربر {user_id} بن شد.")
+    except:
+        await message.answer("❌ فرمت صحیح: `/ban 123456789`")
+
+# ======== دکمه رفع بن ========
+@dp.callback_query(lambda c: c.data == "unban")
 async def unban_user(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
         await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
         return
-    await callback.message.answer("✅ آیدی عددی کاربر رو برای رفع بن بفرست:")
+    await callback.message.answer("✅ آیدی عددی کاربر رو به‌صورت زیر بفرست:\n`/unban 123456789`")
     await callback.answer()
 
-@dp.message(lambda msg: msg.text and msg.text.isdigit() and "بن" in msg.text)
-async def handle_ban(message: types.Message):
+# ======== دستور /unban ========
+@dp.message(Command("unban"))
+async def unban_cmd(message: types.Message):
     if not await is_admin(message.chat.id, message.from_user.id):
         await message.answer("⛔ فقط ادمین‌ها!")
         return
-    user_id = int(message.text)
     try:
-        await bot.ban_chat_member(message.chat.id, user_id)
-        await message.answer(f"✅ کاربر {user_id} بن شد.")
-    except Exception as e:
-        await message.answer(f"❌ خطا: {e}")
-
-@dp.message(lambda msg: msg.text and msg.text.isdigit() and "رفع بن" in msg.text)
-async def handle_unban(message: types.Message):
-    if not await is_admin(message.chat.id, message.from_user.id):
-        await message.answer("⛔ فقط ادمین‌ها!")
-        return
-    user_id = int(message.text)
-    try:
+        user_id = int(message.text.split()[1])
         await bot.unban_chat_member(message.chat.id, user_id)
         await message.answer(f"✅ بن کاربر {user_id} رفع شد.")
-    except Exception as e:
-        await message.answer(f"❌ خطا: {e}")
+    except:
+        await message.answer("❌ فرمت صحیح: `/unban 123456789`")
 
-# ======== پاک کردن پیام‌ها ========
-@dp.callback_query(lambda c: c.data == "clear_messages")
+# ======== دکمه پاک کردن پیام‌ها ========
+@dp.callback_query(lambda c: c.data == "clear")
 async def clear_messages(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
         await callback.answer("⛔ فقط ادمین‌ها!", show_alert=True)
         return
-    await callback.message.answer("🧹 تعداد پیام‌ها رو برای پاک کردن بفرست (مثلاً 10):")
+    await callback.message.answer("🧹 تعداد پیام‌ها رو بفرست (مثلاً `10`):")
     await callback.answer()
 
+# ======== دریافت تعداد پیام برای پاک کردن ========
 @dp.message(lambda msg: msg.text and msg.text.isdigit())
-async def handle_clear(message: types.Message):
+async def clear_cmd(message: types.Message):
     if not await is_admin(message.chat.id, message.from_user.id):
         await message.answer("⛔ فقط ادمین‌ها!")
         return
     count = int(message.text)
     if count > 100:
-        await message.answer("❌ حداکثر ۱۰۰ پیام می‌تونی پاک کنی.")
+        await message.answer("❌ حداکثر ۱۰۰ پیام.")
         return
     deleted = 0
     async for msg in bot.get_chat_history(message.chat.id, limit=count):
@@ -171,77 +133,23 @@ async def handle_clear(message: types.Message):
             deleted += 1
     await message.answer(f"✅ {deleted} پیام پاک شد.")
 
-# ======== خوش‌آمدگویی خودکار ========
+# ======== خوش‌آمدگویی ========
 @dp.message()
-async def welcome_new_member(message: types.Message):
+async def welcome(message: types.Message):
     if message.new_chat_members:
         for member in message.new_chat_members:
-            await message.answer(f"👋 به گروه خوش آمدی {member.full_name}!\nلطفاً قوانین رو رعایت کن.")
+            await message.answer(f"👋 به گروه خوش آمدی {member.full_name}!")
 
-# ======== حذف پیام‌های دارای لینک یا کلمات ممنوع ========
+# ======== حذف لینک‌ها (فقط برای غیرادمین‌ها) ========
 @dp.message()
-async def filter_messages(message: types.Message):
+async def filter_links(message: types.Message):
     if message.chat.type != "private":
-        blocked_words = ["تبلیغ", "سئو", "لینک", "https://", "http://"]
-        if any(word in message.text.lower() for word in blocked_words):
+        if "http" in message.text or "www." in message.text:
             if not await is_admin(message.chat.id, message.from_user.id):
                 await message.delete()
-                await message.answer("❌ پیام شما حاوی لینک یا کلمه ممنوعه بود و حذف شد.")
+                await message.answer("❌ ارسال لینک ممنوع!", reply_to_message_id=message.message_id)
 
-# ======== بازی‌ها ========
-@dp.callback_query(lambda c: c.data == "game")
-async def game(callback: types.CallbackQuery):
-    await callback.message.answer("🎮 بازی انتخاب کن:", reply_markup=game_menu())
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "dice")
-async def dice(callback: types.CallbackQuery):
-    await callback.message.answer_dice(emoji="🎲")
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "dart")
-async def dart(callback: types.CallbackQuery):
-    await callback.message.answer_dice(emoji="🎯")
-    await callback.answer()
-
-# ======== پنل ادمین ========
-@dp.callback_query(lambda c: c.data == "admin_panel")
-async def admin_panel(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
-        await callback.answer("⛔ دسترسی ندارید!", show_alert=True)
-        return
-    await callback.message.answer("⚙️ پنل ادمین:", reply_markup=admin_menu())
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "stats")
-async def stats(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
-        await callback.answer("⛔ دسترسی ندارید!", show_alert=True)
-        return
-    count = users_col.count_documents({})
-    await callback.message.answer(f"📊 تعداد کاربران: {count}")
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "back_main")
-async def back_main(callback: types.CallbackQuery):
-    await callback.message.answer("🔙 منوی اصلی:", reply_markup=main_menu())
-    await callback.answer()
-
-# ======== دستورات ========
-@dp.message(Command("help"))
-async def help_command(message: types.Message):
-    await message.answer("📖 راهنما:\n/start - شروع\n/help - راهنما\n/profile - آیدی من")
-
-@dp.message(Command("profile"))
-async def profile(message: types.Message):
-    await message.answer(f"👤 نام: {message.from_user.full_name}\n🆔 آیدی: {message.from_user.id}")
-
-@dp.message()
-async def unknown(message: types.Message):
-    if message.chat.type == "private":
-        await message.answer("❌ دستور نامعتبر!\nاز /start استفاده کن.")
-
-# ======== پورت برای رندر ========
+# ======== پورت ========
 async def health_check(request):
     return web.Response(text="✅ Bot is running!")
 
@@ -255,10 +163,9 @@ async def start_web():
     await site.start()
     logging.info(f"✅ Web server started on port {port}")
 
-# ======== اجرای اصلی ========
 async def main():
     await start_web()
-    logging.info("🤖 Starting bot polling...")
+    logging.info("🤖 Starting bot...")
     await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
