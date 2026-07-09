@@ -1,6 +1,7 @@
 import asyncio
 import os
 import logging
+import requests
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -23,7 +24,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
-ADMIN_ID = 466050034  # آیدی شما
+ADMIN_ID = 466050034
 
 # ======== منوهای شیشه‌ای ========
 def main_menu():
@@ -59,12 +60,58 @@ async def start(message: types.Message):
         reply_markup=main_menu()
     )
 
-# ======== کالبک‌ها ========
+# ======== دانلود اینستاگرام (واقعی) ========
 @dp.callback_query(lambda c: c.data == "insta")
 async def insta(callback: types.CallbackQuery):
-    await callback.message.answer("📎 لینک اینستاگرام رو بفرست (فعلاً فقط متن رو نشون می‌دم)")
+    await callback.message.answer("📎 لینک پست اینستاگرام رو بفرست:")
     await callback.answer()
 
+@dp.message(lambda msg: msg.text and ("instagram.com" in msg.text or "instagr.am" in msg.text))
+async def get_insta(message: types.Message):
+    url = message.text.strip()
+    msg = await message.answer("⏳ در حال دریافت از اینستاگرام...")
+
+    try:
+        # استفاده از API رایگان viddownload.in
+        api_url = f"https://viddownload.in/api/instagram?url={url}"
+        response = requests.get(api_url, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success") and data.get("media"):
+                media_url = data["media"]
+                if data.get("type") == "video":
+                    await message.answer_video(media_url, caption="✅ ویدیو دانلود شد!")
+                else:
+                    await message.answer_photo(media_url, caption="✅ عکس دانلود شد!")
+                await msg.delete()
+                return
+
+        # API جایگزین: apido.ir
+        api_url2 = f"https://apido.ir/api/instagram/post?url={url}"
+        response2 = requests.get(api_url2, timeout=15)
+        if response2.status_code == 200:
+            data2 = response2.json()
+            if data2.get("status") == "success" and data2.get("data"):
+                post = data2["data"]
+                if post.get("type") == "video":
+                    await message.answer_video(post["download_url"], caption="✅ ویدیو دانلود شد!")
+                elif post.get("type") == "image":
+                    await message.answer_photo(post["download_url"], caption="✅ عکس دانلود شد!")
+                else:
+                    await message.answer("❌ نوع پست پشتیبانی نمی‌شود.")
+                await msg.delete()
+                return
+
+        # اگر هیچ API جواب نداد
+        await message.answer("❌ خطا! لینک معتبر نیست یا اینستاگرام محدودیت ایجاد کرده.")
+
+    except Exception as e:
+        logging.error(f"Instagram error: {e}")
+        await message.answer("❌ خطا! لطفاً لینک را بررسی کن یا بعداً امتحان کن.")
+
+    await msg.delete()
+
+# ======== بازی‌ها ========
 @dp.callback_query(lambda c: c.data == "game")
 async def game(callback: types.CallbackQuery):
     await callback.message.answer("🎮 بازی انتخاب کن:", reply_markup=game_menu())
@@ -80,6 +127,7 @@ async def dart(callback: types.CallbackQuery):
     await callback.message.answer_dice(emoji="🎯")
     await callback.answer()
 
+# ======== پنل ادمین ========
 @dp.callback_query(lambda c: c.data == "admin_panel")
 async def admin_panel(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -102,7 +150,7 @@ async def back_main(callback: types.CallbackQuery):
     await callback.message.answer("🔙 منوی اصلی:", reply_markup=main_menu())
     await callback.answer()
 
-# ======== پیام‌های متنی ========
+# ======== دستورات ========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     await message.answer("📖 راهنما:\n/start - شروع\n/help - راهنما\n/profile - آیدی من")
