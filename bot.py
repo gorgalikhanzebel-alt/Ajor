@@ -15,9 +15,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
-ADMIN_ID = 466050034  # ایدی عددی شما
-
-# ======== بررسی ادمین بودن ========
+# ======== تابع بررسی ادمین ========
 async def is_admin(chat_id: int, user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id, user_id)
@@ -43,7 +41,7 @@ async def start(message: types.Message):
     else:
         await message.answer("🤖 ربات مدیریت گروه فعال است.", reply_markup=group_menu())
 
-# ======== دکمه قفل گروه ========
+# ======== قفل ========
 @dp.callback_query(lambda c: c.data == "lock")
 async def lock_group(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
@@ -53,7 +51,7 @@ async def lock_group(callback: types.CallbackQuery):
     await callback.message.answer("🔒 گروه قفل شد.")
     await callback.answer()
 
-# ======== دکمه باز کردن گروه ========
+# ======== باز کردن ========
 @dp.callback_query(lambda c: c.data == "unlock")
 async def unlock_group(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
@@ -63,7 +61,7 @@ async def unlock_group(callback: types.CallbackQuery):
     await callback.message.answer("🔓 گروه باز شد.")
     await callback.answer()
 
-# ======== دکمه بن کاربر ========
+# ======== بن ========
 @dp.callback_query(lambda c: c.data == "ban")
 async def ban_user(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
@@ -72,7 +70,6 @@ async def ban_user(callback: types.CallbackQuery):
     await callback.message.answer("🚫 آیدی عددی کاربر رو به‌صورت زیر بفرست:\n`/ban 123456789`")
     await callback.answer()
 
-# ======== دستور /ban ========
 @dp.message(Command("ban"))
 async def ban_cmd(message: types.Message):
     if not await is_admin(message.chat.id, message.from_user.id):
@@ -85,7 +82,7 @@ async def ban_cmd(message: types.Message):
     except:
         await message.answer("❌ فرمت صحیح: `/ban 123456789`")
 
-# ======== دکمه رفع بن ========
+# ======== رفع بن ========
 @dp.callback_query(lambda c: c.data == "unban")
 async def unban_user(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
@@ -94,7 +91,6 @@ async def unban_user(callback: types.CallbackQuery):
     await callback.message.answer("✅ آیدی عددی کاربر رو به‌صورت زیر بفرست:\n`/unban 123456789`")
     await callback.answer()
 
-# ======== دستور /unban ========
 @dp.message(Command("unban"))
 async def unban_cmd(message: types.Message):
     if not await is_admin(message.chat.id, message.from_user.id):
@@ -107,7 +103,7 @@ async def unban_cmd(message: types.Message):
     except:
         await message.answer("❌ فرمت صحیح: `/unban 123456789`")
 
-# ======== دکمه پاک کردن پیام‌ها ========
+# ======== پاک کردن پیام‌ها ========
 @dp.callback_query(lambda c: c.data == "clear")
 async def clear_messages(callback: types.CallbackQuery):
     if not await is_admin(callback.message.chat.id, callback.from_user.id):
@@ -116,7 +112,6 @@ async def clear_messages(callback: types.CallbackQuery):
     await callback.message.answer("🧹 تعداد پیام‌ها رو بفرست (مثلاً `10`):")
     await callback.answer()
 
-# ======== دریافت تعداد پیام برای پاک کردن ========
 @dp.message(lambda msg: msg.text and msg.text.isdigit())
 async def clear_cmd(message: types.Message):
     if not await is_admin(message.chat.id, message.from_user.id):
@@ -140,11 +135,11 @@ async def welcome(message: types.Message):
         for member in message.new_chat_members:
             await message.answer(f"👋 به گروه خوش آمدی {member.full_name}!")
 
-# ======== حذف لینک‌ها (فقط برای غیرادمین‌ها) ========
+# ======== فیلتر لینک ========
 @dp.message()
 async def filter_links(message: types.Message):
     if message.chat.type != "private":
-        if "http" in message.text or "www." in message.text:
+        if message.text and ("http" in message.text or "www." in message.text):
             if not await is_admin(message.chat.id, message.from_user.id):
                 await message.delete()
                 await message.answer("❌ ارسال لینک ممنوع!", reply_to_message_id=message.message_id)
